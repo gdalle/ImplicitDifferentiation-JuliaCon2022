@@ -122,6 +122,14 @@ begin
 	sciml_logo, jump_logo, chainrules_logo
 end;
 
+# ╔═╡ 0e824873-3b0f-45d4-9b0f-688d724398c7
+md"""
+Presentation mode
+"""
+
+# ╔═╡ a74bfe02-6924-40c1-9151-02441833d737
+html"<button onclick='present()'>Toggle presentation mode</button>"
+
 # ╔═╡ eb167f89-ad8a-447b-8995-64d1d0b66f80
 md"""
 # `ImplicitDifferentiation.jl`
@@ -146,9 +154,6 @@ md"""
 	<https://gdalle.github.io/ImplicitDifferentiation-JuliaCon2022/>
 """
 
-# ╔═╡ a74bfe02-6924-40c1-9151-02441833d737
-html"<button onclick='present()'>Toggle presentation mode</button>"
-
 # ╔═╡ 61cf62b0-2f25-4c23-8fa2-ac86e804b1e5
 md"""
 # 1. What is implicit differentiation?
@@ -162,17 +167,17 @@ md"""
 # ╔═╡ 4b555210-5d50-4241-b217-6648e2282bbd
 begin
 	motivation_text = md"""
-	We want to differentiate complex routines such as
+	We want to differentiate complex routines:
 	
 	- Nonlinear systems;
 	- Constrained optimization problems;
 	- Fixed-point iterations;
 	- Differential equations.
 	
-	The solver we use may not work well with autodiff because
+	The solver we use may not work well with autodiff:
 	
-	1. It is a black box (autodiff in another language: complicated);
-	2. It is iterative (autodiff by unrolling: expensive).
+	1. Black box (autodiff in another language: complicated);
+	2. Iterative (autodiff by unrolling: expensive).
 	"""
 	
 	motivation_image = Plots.plot(
@@ -181,23 +186,23 @@ begin
 		layout=(2, 1),
 		ticks=nothing,
 		showaxis=false,
-		size=(300, 300)
+		size=(250, 250)
 	)
-	
-	TwoColumn(motivation_text, motivation_image, 80)
+
+	TwoColumn(motivation_text, motivation_image, 70)
 end
 
 # ╔═╡ 33b8424d-4544-47f6-818e-0179811bb151
 md"""
 ## Specification vs implementation
 
-An implicit function $x \mapsto \hat{y}(x)$ is defined as a solution to
+An implicit function $x \mapsto \hat{y}(x)$ from $\mathbb{R}^n$ to $\mathbb{R}^d$ is defined as a solution to
 ```math
-F(x,\hat{y}(x)) = 0
+F(x,\hat{y}(x)) = 0_d
 ```
-Does not constrain the implementation of the solver $\hat{y}$: only specifies a condition on the output.
+No constraint on the implementation of the solver $\hat{y}(\cdot)$, just some conditions on its output.
 
-We can use this condition for autodiff...
+We can use these conditions for autodiff...
 
 1. Even based on a black box solver;
 2. Without unrolling iterations.
@@ -207,13 +212,13 @@ We can use this condition for autodiff...
 md"""
 ## The implicit function theorem
 
-Differentiating the condition $F(x, \hat{y}(x)) = 0$ w.r.t. $x$ yields
+Differentiating the conditions $F(x, \hat{y}(x)) = 0_d$ with respect to $x$ yields
 ```math
-\underbrace{\partial_1 F(x, \hat{y}(x))}_{-B} + \underbrace{\partial_2 F(x, \hat{y}(x))}_{A} ~ \underbrace{\partial \hat{y}(x)}_{J} = 0
+\underbrace{\partial_1 F(x, \hat{y}(x))}_{-B} + \underbrace{\partial_2 F(x, \hat{y}(x))}_{A} ~ \underbrace{\partial \hat{y}(x)}_{J} = 0_{d \times n}
 ```
-The Jacobian of $\hat{y}$ can be computed in three steps:
-1. Call the solver $\hat{y}(x)$
-1. Evaluate the partial Jacobians $\partial_1 F$ and $\partial_2 F$
+The Jacobian of $\hat{y}(\cdot)$ can be obtained in three steps:
+1. Call the solver to compute $\hat{y}(x)$
+1. Use autodiff on $F$ to evaluate $\partial_1 F$ and $\partial_2 F$
 1. Solve the linear system $AJ = B$
 
 !!! tip "Reference"
@@ -235,7 +240,7 @@ In a linear regression setting $y \approx X \beta$, one way to ensure sparsity o
 ```math
 \hat{\beta}(X, y) = \min_{\beta} ~ \lVert y - X \beta \rVert_2^2 \quad \text{s.t.} \quad \lVert \beta \rVert_1 \leq 1/\lambda \tag{QP}
 ```
-The effect of $\lambda$ on the optimal parameter is well understood (from now on we take $\lambda = 1$). The effect of $X$ and $y$ is less clear.
+The effect of $\lambda$ on the optimal parameter is well understood (from now on we take $\lambda = 1$). The effect of $\texttt{data} = (X, y)$ is less clear.
 
 We want to perform sensitivity analysis by computing $\partial \hat{\beta} / \partial X$ and $\partial \hat{\beta} / \partial y$.
 """
@@ -289,7 +294,7 @@ md"""
 
 The optimal parameter can be specified as a fixed point of the projected gradient iteration:
 ```math
-T(\hat{\beta}) = \hat{\beta} \quad \text{where} \quad T: \beta \longmapsto \mathrm{proj}_{\mathcal{B}_{1/\lambda}} \left(\beta - \eta \nabla_\beta \lVert y - X\beta \rVert_2^2 \right)
+F(\texttt{data}, \beta) = \beta - \mathrm{proj}_{\mathcal{B}_{1/\lambda}} \left(\beta - \eta \nabla_\beta \lVert y - X\beta \rVert_2^2 \right)
 ```
 This is true _even if we don't use a projected gradient to compute $\hat{\beta}$._
 """
@@ -303,7 +308,7 @@ function proj_B1(v::AbstractVector{R}) where {R<:Real}
 end
 
 # ╔═╡ 3c7b50c7-2f64-4a39-ae44-47463c636702
-function fixed_point(data, β; η=1)
+function fixed_point_conditions(data, β; η=1)
 	grad_loss = 2 * data.X' * (data.X * β - data.y)
 	return β - Zygote.forwarddiff(proj_B1, β - η * grad_loss)
 end
@@ -312,11 +317,13 @@ end
 md"""
 ## A differentiable wrapper
 
-We can now wrap the `lasso` solver inside a callable structure that will make it differentiable. This structure is called `ImplicitFunction`, it is the only export of `ImplicitDifferentiation.jl`.
+We can now wrap the `lasso` solver inside a callable `ImplicitFunction` that will make it differentiable.
 """
 
 # ╔═╡ 4f2cd0d0-924a-4338-980e-a8a6e3981232
-differentiable_lasso = ImplicitDifferentiation.ImplicitFunction(lasso, fixed_point)
+differentiable_lasso = ImplicitDifferentiation.ImplicitFunction(
+	lasso, fixed_point_conditions
+)
 
 # ╔═╡ 4face9e3-6bbf-4685-8c22-439a5c668a73
 md"""
@@ -390,27 +397,17 @@ end
 ```
 """
 
-# ╔═╡ e5e054cf-b220-495c-b9f0-c6d0e35cad8f
-md"""
-## Alternatives for optimization
-
-| | [`DiffOpt.jl`](https://github.com/jump-dev/DiffOpt.jl) | [`InferOpt.jl`](https://github.com/axelparmentier/InferOpt.jl) |
-| --- | --- | --- |
-| **Focus** | Convex optimization pbs | Combinatorial optimization pbs |
-| **Requirements** | Explicit [`JuMP.jl`](https://github.com/jump-dev/JuMP.jl) model | Black box MILP optimizer |
-| **Method** | KKT optimality conditions | Regularization / perturbation |
-| **Differentials** | Exact | Approximate |
-"""
-
 # ╔═╡ a33fe1a4-1dce-4bcf-9792-26c3bf81676a
 md"""
 ## Perspectives
 
 - Improve support for custom structs
-- Benchmark performance compared to unrolling
+- Benchmark performance compared with
+  - unrolling iterations
+  - alternatives such as [`DiffOpt.jl`](https://github.com/jump-dev/DiffOpt.jl) or [`InferOpt.jl`](https://github.com/axelparmentier/InferOpt.jl)
 - Add more application examples to the docs (what do you want to see there?)
 
-> Thank you for your attention! Any questions?
+> Thank you for your attention!
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -2118,10 +2115,11 @@ version = "0.9.1+5"
 # ╟─3f4a1446-e908-4aed-8d02-e1ca29da30bf
 # ╟─67e7cc3e-132e-4ae7-b4d9-347f61143bb5
 # ╟─06f9e286-701e-4bc5-9265-10bb22539a7b
+# ╟─0e824873-3b0f-45d4-9b0f-688d724398c7
+# ╟─a74bfe02-6924-40c1-9151-02441833d737
 # ╟─eb167f89-ad8a-447b-8995-64d1d0b66f80
 # ╟─d911c3bf-4b33-4a19-81b2-b0e0608aa72a
 # ╟─7ec11de4-2e5d-4f60-9602-6aba7b6baf83
-# ╟─a74bfe02-6924-40c1-9151-02441833d737
 # ╟─61cf62b0-2f25-4c23-8fa2-ac86e804b1e5
 # ╟─678ce0ac-cfaa-4ff7-998b-924caef4a669
 # ╟─4b555210-5d50-4241-b217-6648e2282bbd
@@ -2137,8 +2135,8 @@ version = "0.9.1+5"
 # ╠═3248beab-0fb9-451d-972b-959273222788
 # ╟─2c1887aa-a88e-4a5e-9a8e-210f28550873
 # ╟─8f3c1e79-50bd-4331-abe7-6200df3b225c
-# ╠═3c7b50c7-2f64-4a39-ae44-47463c636702
 # ╟─7cad8940-5800-48d1-b983-0030b3b1960c
+# ╠═3c7b50c7-2f64-4a39-ae44-47463c636702
 # ╟─5fb3819d-5c5f-40c1-93f1-7ebcfd92051d
 # ╠═4f2cd0d0-924a-4338-980e-a8a6e3981232
 # ╟─4face9e3-6bbf-4685-8c22-439a5c668a73
@@ -2149,7 +2147,6 @@ version = "0.9.1+5"
 # ╟─4a60f462-87d3-4d17-a355-f4548184fa5a
 # ╟─e74dc39f-296c-4f67-a0cc-017e20d569b5
 # ╟─cc8d2698-fa58-4e7b-ab72-046afaca2256
-# ╟─e5e054cf-b220-495c-b9f0-c6d0e35cad8f
 # ╟─a33fe1a4-1dce-4bcf-9792-26c3bf81676a
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
